@@ -15,13 +15,13 @@ jobs:
     runs-on: ubuntu-24.04
     container: golang:1.24.0-bookworm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build peercash-signer
         working-directory: signer
         run: |
           go vet ./...
           CGO_ENABLED=0 go build -buildvcs=false -trimpath -o peercash-signer .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: peercash-signer
           path: signer/peercash-signer
@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-24.04
     container: rust:1.96-bookworm   # Debian 12: the binaries need glibc 2.36 or later
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Tools
         run: |
           apt-get update -qq && apt-get install -y -qq --no-install-recommends cmake python3 >/dev/null
@@ -50,7 +50,7 @@ jobs:
           cargo test --release --locked -- --nocapture
       - name: Payout tests
         run: python3 -m unittest -v test_payout
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: peercash-signer
           path: signer-bin
@@ -64,7 +64,7 @@ jobs:
           sha256sum peer-pool-linux-x86_64.tar.gz > SHA256SUMS
           sha256sum peer-pool-linux-x86_64/peer-pool peer-pool-linux-x86_64/peercash-signer
           cat SHA256SUMS
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: peer-pool-linux-x86_64
           path: |
@@ -78,7 +78,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: peer-pool-linux-x86_64
       - name: Publish the release
