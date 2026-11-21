@@ -20,7 +20,7 @@ jobs:
         working-directory: signer
         run: |
           go vet ./...
-          CGO_ENABLED=0 go build -trimpath -o peercash-signer .
+          CGO_ENABLED=0 go build -buildvcs=false -trimpath -o peercash-signer .
       - uses: actions/upload-artifact@v4
         with:
           name: peercash-signer

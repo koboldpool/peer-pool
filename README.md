@@ -49,7 +49,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
 cd ../peer-pool && RANDOMX_LIB_DIR=../RandomX/build cargo build --release --locked
 RANDOMX_LIB_DIR=../RandomX/build cargo test --release --locked     # the vectors in test/
 cd .. && python3 -m unittest test_payout
-cd signer && CGO_ENABLED=0 go build -trimpath -o peercash-signer .
+cd signer && CGO_ENABLED=0 go build -buildvcs=false -trimpath -o peercash-signer .
 ```
 
 GitHub Actions (`.github/workflows/build.yml`) does all of this on every push and attaches the Linux binaries with
