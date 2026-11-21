@@ -1,0 +1,90 @@
+# Builds and tests peer-pool on every push; a tag v* also publishes the Linux binaries as a GitHub release.
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  signer:
+    runs-on: ubuntu-24.04
+    container: golang:1.24.0-bookworm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build peercash-signer
+        working-directory: signer
+        run: |
+          go vet ./...
+          CGO_ENABLED=0 go build -trimpath -o peercash-signer .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: peercash-signer
+          path: signer/peercash-signer
+
+  build:
+    needs: signer
+    runs-on: ubuntu-24.04
+    container: rust:1.96-bookworm   # Debian 12: the binaries need glibc 2.36 or later
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: |
+          apt-get update -qq && apt-get install -y -qq --no-install-recommends cmake python3 >/dev/null
+      - name: RandomX v1.2.3
+        run: |
+          git clone -q https://github.com/tevador/RandomX /tmp/RandomX
+          cd /tmp/RandomX && git checkout -q 12f2c2ffe2108d6cf54c391fee33c8bc3646cdab
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release >/dev/null && cmake --build build -j "$(nproc)" >/dev/null
+          ls -la build/librandomx.a
+      - name: Pool
+        working-directory: peer-pool
+        env:
+          RANDOMX_LIB_DIR: /tmp/RandomX/build
+        run: |
+          cargo build --release --locked
+          cargo test --release --locked -- --nocapture
+      - name: Payout tests
+        run: python3 -m unittest -v test_payout
+      - uses: actions/download-artifact@v4
+        with:
+          name: peercash-signer
+          path: signer-bin
+      - name: Package
+        run: |
+          mkdir -p dist/peer-pool-linux-x86_64
+          install -m 755 signer-bin/peercash-signer dist/peer-pool-linux-x86_64/peercash-signer
+          cp peer-pool/target/release/peer-pool payout.py README.md LICENSE NOTICE dist/peer-pool-linux-x86_64/
+          cd dist
+          tar --owner=0 --group=0 -czf peer-pool-linux-x86_64.tar.gz peer-pool-linux-x86_64
+          sha256sum peer-pool-linux-x86_64.tar.gz > SHA256SUMS
+          sha256sum peer-pool-linux-x86_64/peer-pool peer-pool-linux-x86_64/peercash-signer
+          cat SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: peer-pool-linux-x86_64
+          path: |
+            dist/peer-pool-linux-x86_64.tar.gz
+            dist/SHA256SUMS
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: peer-pool-linux-x86_64
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" peer-pool-linux-x86_64.tar.gz SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --title "peer-pool $GITHUB_REF_NAME" \
+            --notes "Built by GitHub Actions from commit $GITHUB_SHA (build log: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID). Check the download with: sha256sum -c SHA256SUMS"

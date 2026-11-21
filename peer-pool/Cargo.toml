@@ -1,0 +1,21 @@
+[package]
+name = "peer-pool"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Kobold Pool's PeerCash (PEER) mining pool: Monero-style stratum, RandomX share checks, eth_getWork node link"
+repository = "https://github.com/koboldpool/peer-pool"
+
+[dependencies]
+serde_json = "1"
+
+[lib]
+name = "peerpool"
+path = "src/lib.rs"
+
+[[bin]]
+name = "peer-pool"
+path = "src/main.rs"
+
+[profile.release]
+debug = false

@@ -1,0 +1,13 @@
+peer-pool
+Copyright 2026 Kobold Pool. Apache License 2.0 (see LICENSE).
+
+peer-pool links RandomX (https://github.com/tevador/RandomX, v1.2.3), BSD 3-Clause License, Copyright (c) 2018-2019
+tevador and contributors; the build fetches and compiles it.
+
+signer/ (peercash-signer) uses go-ethereum (https://github.com/ethereum/go-ethereum, v1.17.0), GNU LGPL v3; a built
+peercash-signer contains it.
+
+test/vectors-*.jsonl were made with the PeerCash node's own hasher (https://github.com/PeerCashChain/PeerCashChain,
+commit a753c5f) and real mainnet blocks.
+
+Rust dependency: serde_json (MIT or Apache-2.0).

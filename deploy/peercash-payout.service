@@ -1,0 +1,10 @@
+[Unit]
+Description=Kobold Pool PeerCash payouts (PPLNS credit + pay balances >= 0.1 PEER)
+After=peercash-node.service
+
+[Service]
+Type=oneshot
+User=kobold
+WorkingDirectory=/srv/kobold/coins/peercash
+# The wallet password stays in .wallet-pass (mode 600, owner kobold); the signer reads it from PEER_WALLET_PASSWORD.
+ExecStart=/bin/sh -c 'PEER_WALLET_PASSWORD="$$(cat /srv/kobold/coins/peercash/.wallet-pass)" exec /usr/bin/python3 -I /srv/kobold/coins/peercash/payout.py --data /srv/kobold/coins/peercash/pool-data --rpc http://127.0.0.1:8545 --ref-rpc https://rpc.peercash.io --signer /srv/kobold/coins/peercash/bin/peercash-signer --keystore-dir /srv/kobold/coins/peercash/wallet/keystore --chain-id 620156 --confirmations 200 --min 0.1 --pay'

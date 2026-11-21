@@ -1,0 +1,17 @@
+[Unit]
+Description=Kobold Pool PeerCash engine (peer-pool, stratum 3500 PPLNS / 3510 solo)
+After=peercash-node.service
+
+[Service]
+User=kobold
+WorkingDirectory=/srv/kobold/coins/peercash
+ExecStart=/srv/kobold/coins/peercash/bin/peer-pool --node-rpc http://127.0.0.1:8545 --data /srv/kobold/coins/peercash/pool-data --listen 0.0.0.0:3500 --listen-solo 0.0.0.0:3510 --verify-threads 2
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/srv/kobold/coins/peercash/pool-data
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,21 @@
+[Unit]
+Description=PeerCash node (mainnet) for Kobold Pool
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=kobold
+# Mainnet peers from the official PeerCash wallet: the node's built-in bootnode is the testnet node.
+ExecStart=/srv/kobold/coins/peercash/bin/peercash --datadir /srv/kobold/coins/peercash/node --syncmode full --state.scheme hash --port 30303 --http --http.addr 127.0.0.1 --http.port 8545 --http.api eth,net,web3 --http.vhosts localhost --networkid 620156 --bootnodes enode://cc2782823bee8c12c127c0cdd1215ce00e6f0ed5d201900392a3c8942b1d368bdf42891289ecde9d87330caef83dda8b69c80d3e2da03ccb1a462e57ec730104@134.122.29.72:30303,enode://751d49ecf147088282bb0fa0b02f7d1fd683cdacfe08621deb2a8ada09bd1157496180d0a102751cd0384c3fadeba126325dbc6ac9577dbdc7f193cd49ab034d@167.71.85.230:30303 --staticnodes enode://cc2782823bee8c12c127c0cdd1215ce00e6f0ed5d201900392a3c8942b1d368bdf42891289ecde9d87330caef83dda8b69c80d3e2da03ccb1a462e57ec730104@134.122.29.72:30303,enode://751d49ecf147088282bb0fa0b02f7d1fd683cdacfe08621deb2a8ada09bd1157496180d0a102751cd0384c3fadeba126325dbc6ac9577dbdc7f193cd49ab034d@167.71.85.230:30303 --miner.etherbase 0xPOOL_ADDRESS --verbosity 3
+Restart=always
+RestartSec=10
+# Clean stop: with the hash state scheme a killed node rewinds its chain.
+KillSignal=SIGINT
+TimeoutStopSec=300
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/srv/kobold/coins/peercash/node
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

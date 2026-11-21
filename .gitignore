@@ -1,0 +1,7 @@
+/target/
+**/target/
+__pycache__/
+*.pyc
+pool-data/
+.wallet-pass
+keystore/
