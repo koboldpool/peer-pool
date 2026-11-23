@@ -704,6 +704,21 @@ fn stats_loop(sh: Arc<Shared>) {
     }
 }
 
+/// The round's work so far, rebuilt from the share log so a restart does not reset the round effort: the work of
+/// every share after the last block share (the same rule the live count uses).
+fn round_work_from_log(path: &std::path::Path) -> f64 {
+    let Ok(f) = File::open(path) else { return 0.0 };
+    let mut work = 0.0;
+    for line in BufReader::new(f).lines().map_while(Result::ok) {
+        let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
+        work += v.get("work").and_then(Value::as_f64).unwrap_or(0.0);
+        if v.get("block").and_then(Value::as_bool) == Some(true) {
+            work = 0.0;
+        }
+    }
+    work
+}
+
 fn main() {
     let cfg = config();
     std::fs::create_dir_all(&cfg.data).expect("create the data directory");
@@ -728,7 +743,7 @@ fn main() {
         peers: AtomicU64::new(0),
         fee_bp: AtomicU32::new(0),
         solo_fee_bp: AtomicU32::new(0),
-        round_work: Mutex::new(0.0),
+        round_work: Mutex::new(round_work_from_log(&cfg.data.join("shares.jsonl"))),
         counters: Counters::default(),
         files: Mutex::new(files),
         started: now(),
@@ -772,4 +787,29 @@ fn main() {
         thread::spawn(move || accept(addr, true, sh2));
     }
     accept(sh.cfg.listen.clone(), false, sh.clone());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn round_work_restarts_after_the_last_block() {
+        let path = std::env::temp_dir().join(format!("peer-round-work-{}.jsonl", std::process::id()));
+        std::fs::write(
+            &path,
+            concat!(
+                "{\"work\":2.0,\"block\":false}\n",
+                "{\"work\":3.0,\"block\":true}\n",
+                "{\"work\":1.5,\"block\":false}\n",
+                "not json\n",
+                "{\"work\":4.0,\"block\":false}\n",
+            ),
+        )
+        .unwrap();
+        let work = round_work_from_log(&path);
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(work, 5.5);
+        assert_eq!(round_work_from_log(&path), 0.0);
+    }
 }
