@@ -154,7 +154,7 @@ struct Shared {
     /// Share work since the pool's last block: effort = round work / block difficulty.
     round_work: Mutex<f64>,
     counters: Counters,
-    files: Mutex<(File, File, File)>, // shares.jsonl, blocks.jsonl, pool.log
+    files: Mutex<(File, File, File, File)>, // shares.jsonl, blocks.jsonl, pool.log, rejects.jsonl
     started: u64,
 }
 
@@ -169,7 +169,11 @@ impl Shared {
 
     fn record(&self, which: usize, v: Value) {
         if let Ok(mut f) = self.files.lock() {
-            let file = if which == 0 { &mut f.0 } else { &mut f.1 };
+            let file = match which {
+                0 => &mut f.0,
+                1 => &mut f.1,
+                _ => &mut f.3, // REJECTS
+            };
             let _ = writeln!(file, "{v}");
         }
     }
@@ -513,9 +517,16 @@ fn login(sh: &Shared, sess: &Session, rid: &Value, p: &Value) -> Value {
     ok(rid, json!({"id": format!("{:x}", sess.id), "job": job, "extensions": ["algo", "keepalive"], "status": "OK"}))
 }
 
+/// Which file `Shared::record` writes to: one line per refused share, for our monitoring only (the site never reads it).
+const REJECTS: usize = 2;
+
 fn reject(sh: &Shared, sess: &Session, rid: &Value, msg: &str) -> Value {
     sh.counters.rejected.fetch_add(1, Ordering::Relaxed);
     let mut st = sess.st.lock().unwrap();
+    let (addr, worker) = st.login.clone().unwrap_or_default();
+    let stale = msg.contains("Stale") || msg.contains("expired");
+    sh.record(REJECTS, json!({"ts": now(), "addr": addr, "worker": worker, "ip": sess.peer,
+        "mode": if st.solo { "solo" } else { "pplns" }, "reason": msg, "stale": stale}));
     st.bad_in_a_row += 1;
     if st.bad_in_a_row > MAX_BAD_IN_A_ROW {
         sess.alive.store(false, Ordering::Relaxed);
@@ -723,7 +734,7 @@ fn main() {
     let cfg = config();
     std::fs::create_dir_all(&cfg.data).expect("create the data directory");
     let open = |n: &str| OpenOptions::new().create(true).append(true).open(cfg.data.join(n)).expect("open log file");
-    let files = (open("shares.jsonl"), open("blocks.jsonl"), open("pool.log"));
+    let files = (open("shares.jsonl"), open("blocks.jsonl"), open("pool.log"), open("rejects.jsonl"));
     let rpc = Rpc::new(&cfg.node_rpc).unwrap_or_else(|e| panic!("{e}"));
     let verifier = Verifier::new(cfg.verify_threads);
     let seed_en = (now() as u32).wrapping_mul(2_654_435_761) ^ std::process::id();
