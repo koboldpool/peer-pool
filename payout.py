@@ -13,6 +13,13 @@ import time
 import urllib.request
 from pathlib import Path
 
+# Shared ledger helper (lock, dated copy, fsync'd saves, pending-before-send), loaded by path so it also works
+# under python3 -I (which leaves the script's folder off sys.path).
+import importlib.util as _ilu
+_spec = _ilu.spec_from_file_location("kobold_ledger", Path(__file__).resolve().parent / "kobold_ledger.py")
+kl = _ilu.module_from_spec(_spec)
+_spec.loader.exec_module(kl)
+
 WEI = 10 ** 18                # wei per PEER
 BASE_REWARD = WEI             # 1 PEER per block (consensus/randomx calcBlockReward)
 HALVING = 10_500_000
@@ -162,13 +169,12 @@ def main() -> int:
 
     data = Path(args.data)
     ledger_path = data / "payouts.json"
-    ledger = json.loads(ledger_path.read_text()) if ledger_path.exists() else {
-        "credited": {}, "orphaned": {}, "balances": {}, "paid": {}, "payments": [], "pool_fees": 0}
+    led = kl.Ledger(ledger_path)  # lock + dated copy before the run
+    ledger = led.open({
+        "credited": {}, "orphaned": {}, "balances": {}, "paid": {}, "payments": [], "pool_fees": 0})
 
     def save():
-        tmp = ledger_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(ledger, indent=1))
-        tmp.replace(ledger_path)
+        led.save(ledger)  # temp file, fsync, rename, fsync the folder
 
     wallet = Wallet(args) if (args.keystore or args.keystore_dir) else None
     tip_height = int(rpc(args.rpc, "eth_blockNumber"), 16)
@@ -264,16 +270,29 @@ def main() -> int:
             print(f"wallet can spend {fmt(max(available, 0))}, not enough for {fmt(amount)} to {addr}; stopping")
             break
         tx = wallet.sign(nonce, addr, amount, tip, max_fee)
-        try:
-            sent = rpc(args.rpc, "eth_sendRawTransaction", tx["raw"])
-        except RuntimeError as e:
-            print(f"payment to {addr} not accepted by the node: {e}")
-            break
+        # Pending before send. The signed transaction's hash and nonce are known before it is broadcast, so it is
+        # saved as an ordinary "pending" payment first: if the run dies after the broadcast, reconcile() follows it
+        # by hash; if it dies before, its nonce is either re-signed after REPLACE_AFTER blocks or taken by a later
+        # payment, which fails this one and credits it back. Either way it is paid once, with no check by hand.
+        rec = {"ts": int(time.time()), "addr": addr, "amount": amount, "txid": tx["hash"],
+               "from": wallet.address, "nonce": nonce, "tip": tip, "max_fee": max_fee,
+               "status": "pending", "height_sent": tip_height}
         ledger["balances"][addr] -= amount
         ledger["paid"][addr] = ledger["paid"].get(addr, 0) + amount
-        ledger["payments"].append({"ts": int(time.time()), "addr": addr, "amount": amount, "txid": sent,
-                                   "from": wallet.address, "nonce": nonce, "tip": tip, "max_fee": max_fee,
-                                   "status": "pending", "height_sent": tip_height})
+        ledger["payments"].append(rec)
+        save()
+        try:
+            sent = rpc(args.rpc, "eth_sendRawTransaction", tx["raw"])
+        except Exception as e:  # noqa: BLE001
+            if not kl.refused(e):
+                raise  # no answer: it may be out; the saved record is followed by hash like any pending payment
+            ledger["payments"].remove(rec)
+            ledger["balances"][addr] += amount
+            ledger["paid"][addr] -= amount
+            save()
+            print(f"payment to {addr} not accepted by the node: {e}")
+            break
+        rec["txid"] = sent = sent or tx["hash"]
         save()
         print(f"paid {fmt(amount)} to {addr} (nonce {nonce}): {sent}")
         available -= cost

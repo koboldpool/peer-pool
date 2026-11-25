@@ -8,6 +8,7 @@ check how their shares are counted and paid.
 |---|---|
 | `peer-pool/` | the pool server (Rust): Monero-style stratum for stock XMRig, work from the node's `eth_getWork`, every share re-checked with RandomX |
 | `payout.py` | PPLNS payouts; blocks cross-checked with a second node before they are credited |
+| `kobold_ledger.py` | crash-safe ledger for `payout.py` (keep it next to it): a lock, durable saves, dated copies, and each payment saved before it is sent, so a crash can't pay twice |
 | `signer/` | `peercash-signer` (Go): signs payout transfers offline from the pool's keystore (the node has no personal API) |
 | `test/` | test vectors made with the PeerCash node's own hasher, including real mainnet blocks |
 | `deploy/` | example systemd units for node, pool and payouts |
